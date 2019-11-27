@@ -1,7 +1,8 @@
 const request=require('request');
 const fs=require('fs');
 const chalk=require('chalk');
-
+const { join }=require('path');
+const { readdir, stat }=require('fs-extra')
 
 const publicUpload=(paths)=>
 {
@@ -28,7 +29,7 @@ const publicUpload=(paths)=>
     {
         request.post(
             {
-                url:'http://localhost:4000/cli/public/multiple/fileupload',
+                url:'http://18.191.222.246:4000/cli/public/multiple/fileupload',
                 formData: formData,
             }, function optionalCallback(err, httpResponse, body) {
                 if (err) {
@@ -48,7 +49,7 @@ const publicSingleFileUpload=(path)=>
         };
         request.post(
             {
-                url:'http://localhost:4000/cli/public/single/fileupload',
+                url:'http://127.0.0.1:4000/cli/public/single/fileupload',
                 formData: formData
             }, function optionalCallback(err, httpResponse, body) {
                 if (err) {
@@ -63,35 +64,42 @@ const publicSingleFileUpload=(path)=>
     }
 }
 
-const formData={
+
+
+const publicDirUpload=async (path)=>
+{
+    let allFiles=[];
+    const formData={
         attachments:[
             
         ]
     }
-const publicDirUpload=(path)=>
-{
-    fs.readdir(path,(err, list)=>
+    allFiles= await readUploadDir(path, allFiles)
+    var f=0;
+    for(let i=0;i<allFiles.length;i++)
     {
-        if(err)
+        if(fs.existsSync(allFiles[i]))
         {
-            console.log(err)
-        }
-        for(let i=0;i<list.length;i++)
-        {
-            if(fs.lstatSync(path+'/'+list[i]).isDirectory())
-            {
-                // console.log(list[i]+" is a dir");
-                var realpath=path+'/'+list[i];
-                publicDirUpload(realpath);
+            if((await stat(allFiles[i])).isDirectory()){
+
             }
-            else if(fs.lstatSync(path+'/'+list[i]).isFile())
+            else
             {
-                formData.attachments.push(fs.createReadStream(`${path}/${list[i]}`));
+                formData.attachments.push(fs.createReadStream(`${allFiles[i]}`));
             }
         }
+        else
+        {
+            f=1;
+            console.info(chalk.red(`${allFiles[i]} does not exist`));
+            break;
+        }
+    }
+    if(f==0)
+    {
         request.post(
             {
-                url:'http://localhost:4000/cli/public/multiple/fileupload',
+                url:'http://127.0.0.1:4000/cli/public/multiple/fileupload',
                 formData: formData,
             }, function optionalCallback(err, httpResponse, body) {
                 if (err) {
@@ -99,10 +107,23 @@ const publicDirUpload=(path)=>
                 }
                 console.info('Upload successful!', 'your files id id:- ', chalk.green(body));
         })
-
-    })
+    }
 }
 
+
+
+async function readUploadDir(path, allFiles){
+    const paths=(await readdir(path)).map(f=>join(path, f));
+    allFiles.push(...paths)
+    // allFiles=allFiles.filter((t)=>{
+    //     if(t===path){
+    //         return false;
+    //     }
+    //     return true;
+    // })
+    await Promise.all(paths.map(async p=>{  return (await stat(p)).isDirectory() && readUploadDir(p, allFiles)  }))
+    return allFiles;
+}
 
 module.exports={
     publicUpload,
